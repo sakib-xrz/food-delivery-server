@@ -28,7 +28,7 @@ const verifyJwt = (req, res, next) => {
   });
 };
 
-// Database Connect 
+// Database Connect
 const uri = process.env.DB_URI;
 
 const client = new MongoClient(uri, {
@@ -41,12 +41,32 @@ async function run() {
   try {
     const usersCollection = client.db("food-delivery-db").collection("users");
     const foodsCollection = client.db("food-delivery-db").collection("foods");
+    const cartCollection = client.db("food-delivery-db").collection("cart");
 
-     app.get("/foods", async (req, res) => {
-       const query = {};
-       const cursor = await foodsCollection.find(query).toArray();
-       res.send(cursor);
-     });
+    app.get("/foods", async (req, res) => {
+      const query = {};
+      const cursor = await foodsCollection.find(query).limit(4);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/foods/all", async (req, res) => {
+      const query = {};
+      const cursor = await foodsCollection.find(query).toArray();
+      res.send(cursor);
+    });
+
+    app.get("/cart", verifyJwt, async (req, res) => {
+      const decoded = req.decoded;
+      if (decoded.email !== req.query.email) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+      const email = req.query.email;
+      const filter = { customerEmail: email };
+      const cursor = cartCollection.find(filter);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -55,8 +75,39 @@ async function run() {
       });
       res.send({ accessToken: token });
     });
+
+    app.post("/cart", async (req, res) => {
+      const cart = req.body;
+      const result = await cartCollection.insertOne(cart);
+      res.send(result);
+    });
+
+    app.put("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const filter = { email: email };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: user,
+      };
+      const result = await usersCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    app.delete("/cart/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await cartCollection.deleteOne(query);
+      res.send(result);
+    });
+
   } finally {
-  }}
+  }
+}
 
 run().catch((err) => console.error(err));
 
